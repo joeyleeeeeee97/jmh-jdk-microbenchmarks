@@ -13,11 +13,11 @@ public class ThreadSwitchBench {
     @Param({"virtual", "platform"})
     private String threadMode;
 
-    @Param({"0", "1", "64", "1024", "8192"})
+    @Param({"0", "1", "64", "1024", "2048"})
     private int stackDepth;
 
     // An approximate level of context switches
-    @Param({"0", "1", "8", "64", "128", "1048"})
+    @Param({"0", "1", "64", "1048", "10000", "80000"})
     private int yieldN;
 
     private Thread.Builder builder;
@@ -60,12 +60,52 @@ public class ThreadSwitchBench {
         done.await();
     }
 
+    @Benchmark
+    public int switchBenchWithReturnVal() throws InterruptedException {
+        AtomicBoolean yieldFinished = new AtomicBoolean(false);
+        CountDownLatch done = new CountDownLatch(2);
+
+        builder.start(new Runnable() {
+            @Override
+            public void run() {
+                while (yieldN > 0) {
+                    yieldN--;
+                    Thread.yield();
+                }
+                yieldFinished.set(true);
+                done.countDown();
+            }
+        });
+        int[] cnt = new int[1];
+
+        builder.start(new Runnable() {
+            @Override
+            public void run() {
+                while (!yieldFinished.get()) {
+                    cnt[0] += stackDepthHelperWithReturnValue(stackDepth);
+                }
+                done.countDown();
+            }
+        });
+        done.await();
+        return cnt[0];
+    }
+
 
     private void stackDepthHelper(int depth) {
         if (depth <= 0) {
             Thread.yield(); // switch
         } else {
             stackDepthHelper(depth - 1);
+        }
+    }
+
+    private int stackDepthHelperWithReturnValue(int depth) {
+        if (depth <= 0) {
+            Thread.yield(); // switch
+            return 0;
+        } else {
+            return stackDepthHelperWithReturnValue(depth - 1) + 1;
         }
     }
 }
